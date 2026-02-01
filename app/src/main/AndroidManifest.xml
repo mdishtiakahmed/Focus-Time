@@ -20,6 +20,11 @@
     
     <!-- Permission to request battery optimization exemption -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    
+    <!-- Permissions for Scheduling and Vibration -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.VIBRATE" />
 
     <application
         android:allowBackup="true"
@@ -54,6 +59,17 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Focus lock service to help users maintain focus" />
         </service>
+        
+        <!-- Alarm Receiver -->
+        <receiver
+            android:name=".receiver.AlarmReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.focusguard.app.ACTION_START_FOCUS" />
+                <action android:name="com.focusguard.app.ACTION_PRE_NOTIFY" />
+            </intent-filter>
+        </receiver>
         
     </application>
 

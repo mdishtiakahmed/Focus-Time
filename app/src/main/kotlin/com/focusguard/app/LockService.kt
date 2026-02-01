@@ -20,6 +20,11 @@ import android.telephony.TelephonyManager
 import android.util.Log
 import android.view.Gravity
 import android.view.WindowManager
+import android.media.MediaPlayer
+import android.media.RingtoneManager
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,11 +44,16 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import com.focusguard.app.data.PreferenceManager
+import com.focusguard.app.data.dataStore
 
 class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
 
@@ -52,6 +62,8 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
     private var targetTimeMillis: Long = 0L
     private var isScreenOn = true
     private var isCallActive = false
+    
+    private lateinit var preferenceManager: PreferenceManager
     
     private val handler = Handler(Looper.getMainLooper())
     private var updateTimerRunnable: Runnable? = null
@@ -94,6 +106,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
         
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         telephonyManager = getSystemService(Context.TELEPHONY_SERVICE) as TelephonyManager
+        preferenceManager = PreferenceManager(this)
         
         // Register screen receiver
         val filter = IntentFilter().apply {
@@ -195,7 +208,7 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
                     val remainingMillis = targetTimeMillis - System.currentTimeMillis()
                     if (remainingMillis <= 0) {
                         // Lock duration completed
-                        stopSelf()
+                        handleCompletion()
                     } else {
                         handler.postDelayed(this, 1000) // Update every second
                     }
@@ -203,6 +216,40 @@ class LockService : Service(), LifecycleOwner, SavedStateRegistryOwner {
             }
         }
         handler.post(updateTimerRunnable!!)
+    }
+    
+    private fun handleCompletion() {
+        // Run coroutine to check preference
+        lifecycleScope.launch {
+            val playSound = preferenceManager.isSoundEnabled.first()
+            performCompletionFeedback(playSound)
+            stopSelf()
+        }
+    }
+    
+    private fun performCompletionFeedback(playSound: Boolean) {
+        // Vibrate
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            val vibrator = vibratorManager.defaultVibrator
+            vibrator.vibrate(VibrationEffect.createOneShot(1000, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            @Suppress("DEPRECATION")
+            val vibrator = getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            @Suppress("DEPRECATION")
+            vibrator.vibrate(1000)
+        }
+        
+        // Play Sound if enabled
+        if (playSound) {
+            try {
+                val notification = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
+                val r = RingtoneManager.getRingtone(applicationContext, notification)
+                r.play()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error playing sound", e)
+            }
+        }
     }
 
     private fun stopTimerUpdates() {
